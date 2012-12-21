@@ -1,0 +1,36 @@
+apply plugin: 'groovy'
+
+group = 'com.sonamine'
+version = '1.0-SNAPSHOT'
+
+dependencies {
+    compile gradleApi()
+    groovy localGroovy()
+}
+
+apply plugin: 'maven'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    testCompile 'junit:junit:4.8.2'
+}
+
+task copylocal(type: Copy, dependsOn: jar) {
+  from(jar.destinationDir) {
+    include jar.archiveName
+  }
+  rename '(.*)', jar.baseName+'.'+jar.extension      
+  into './'
+} 
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            mavenLocal()
+        }
+    }
+}
