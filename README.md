@@ -8,7 +8,7 @@ The name of the package is assumed to be the name of the gradle project with the
 
     rpackage {
       packageDir = 'pkg'
-      packageName = 'sonamine.modeling'
+      packageName = 'MyPackage'
     }
 
 The following R tasks are available: DESCRIPTION, roxygenize, buildRPackage, checkRPackage, and installRPackage.  These do not need to be called directly though, as the following dependencies are setup:
