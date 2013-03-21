@@ -41,13 +41,13 @@ class RPackagePlugin implements Plugin<Project> {
       doFirst {
         def lines = []
         println "Setting DESCRIPTION for package ${project.rpackage.name}"
-        project.file("${rpackage.srcDir}/DESCRIPTION").eachLine { 
+        new File("${rpackage.srcDir}/DESCRIPTION").eachLine { 
           line ->
           if (!line.startsWith("Package") && !line.startsWith("Version")) {
             lines.add(line)
           }
         }
-        project.file("${rpackage.srcDir}/DESCRIPTION").withWriter { out ->
+        new File("${rpackage.srcDir}/DESCRIPTION").withWriter { out ->
           out.writeLine("Package: ${project.rpackage.name}")
           out.writeLine("Version: ${project.version}")
           lines.each() { line ->
@@ -68,8 +68,8 @@ class RPackagePlugin implements Plugin<Project> {
       doFirst {
         commandLine = ['R','-e',
           "library(roxygen2,quietly=TRUE,verbose=FALSE);"+
-          "roxygenize(package.dir='${rpackage.srcDir}',"+
-          "roxygen.dir='${rpackage.buildDir}',"+
+          "roxygenize(package.dir='${project.relativePath(rpackage.srcDir)}',"+
+          "roxygen.dir='${project.relativePath(rpackage.buildDir)}',"+
           "roclets = c(\"collate\", \"namespace\", \"rd\", \"testthat\"))"]
         workingDir project.projectDir
       }
