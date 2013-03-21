@@ -1,5 +1,6 @@
 apply plugin: 'groovy'
 apply plugin: 'maven'
+apply plugin: 'signing'
 
 group = 'com.jfolson'
 version = '0.1-SNAPSHOT'
@@ -9,7 +10,67 @@ dependencies {
     groovy localGroovy()
 }
 
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from 'build/docs/javadoc'
+}
+ 
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allSource
+    classifier = 'sources'
+}
+
+artifacts {
+    archives jar
+    archives javadocJar
+    archives sourcesJar
+}
+
+signing {
+    sign configurations.archives
+}
+
 repositories {
     mavenCentral()
     mavenLocal()
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signPom(deployment) }
+ 
+            repository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
+              authentication(userName: sonatypeUsername, password: sonatypePassword)
+            }
+ 
+            pom.project {
+               name 'gradle-plugin-r'
+               packaging 'jar'
+               description 'Gradle plugin for developing building and building packages for R, is a statistical programming language.'
+               url 'http://github.com/jamiefolson/gradle-plugin-r/'
+ 
+               scm {
+                   url 'scm:git@github.com:jamiefolson/gradle-plugin-r.git'
+                   connection 'scm:git@github.com:jamiefolson/gradle-plugin-r.git'
+                   developerConnection 'scm:git@github.com:jamiefolson/gradle-plugin-r.git'
+               }
+ 
+               licenses {
+                   license {
+                       name 'The Apache Software License, Version 2.0'
+                       url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                       distribution 'repo'
+                   }
+               }
+ 
+               developers {
+                   developer {
+                       id 'jamiefolson'
+                       name 'Jamie F Olson'
+                   }
+               }
+           }
+        }
+    }
 }
