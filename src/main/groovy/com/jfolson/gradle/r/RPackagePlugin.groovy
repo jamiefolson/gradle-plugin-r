@@ -26,8 +26,19 @@ class RPackagePlugin implements Plugin<Project> {
 	project.rpackage.conventionMapping.map("name") { project.name }
 	project.rpackage.conventionMapping.map("srcDir") { project.file("src") }
 	project.rpackage.conventionMapping.map("buildDir") { 
-		project.file("${project.buildDir}/${project.rpackage.name}") }
+	project.file("${project.buildDir}/${project.rpackage.name}") }
 	
+    if (project.configurations.findByName("ant")==null){
+		project.configurations.add("ant")
+	}
+    project.dependencies {
+        ant("org.apache.ant:ant-commons-net:1.8.4") {
+            module("commons-net:commons-net:1.4.1") {
+                dependencies "oro:oro:2.0.8:jar"
+            }
+        }
+    }
+ 
     project.task('DESCRIPTION') {
 		extensions.create("rpackage",RPackageBaseExtension.class)
 		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
@@ -57,21 +68,23 @@ class RPackagePlugin implements Plugin<Project> {
       }
     }
 
-    project.task('roxygenize',type:Exec, dependsOn: project.tasks.DESCRIPTION) {
+    project.task('roxygenize',type:RExec, dependsOn: project.tasks.DESCRIPTION) {
 		extensions.create("rpackage",RPackageBaseExtension.class)
 		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
 		rpackage.conventionMapping.map("buildDir") { project.rpackage.buildDir }
       project.gradle.projectsEvaluated({
-        inputs.dir "${rpackage.srcDir}"
-        outputs.dir "${rpackage.buildDir}/"
-        })
-      doFirst {
-        commandLine = ['R','-e',
-          "library(roxygen2,quietly=TRUE,verbose=FALSE);"+
+        if (!rpackage.srcDir.equals(rpackage.buildDir)){
+            inputs.dir "${rpackage.srcDir}/"
+            outputs.dir "${rpackage.buildDir}/"
+        }
+    })
+    doFirst {
+        expression = "library(roxygen2,quietly=TRUE,verbose=FALSE);"+
           "roxygenize(package.dir='${project.relativePath(rpackage.srcDir)}',"+
           "roxygen.dir='${project.relativePath(rpackage.buildDir)}',"+
-          "roclets = c(\"collate\", \"namespace\", \"rd\", \"testthat\"))"]
-        workingDir project.projectDir
+          "roclets = c(\"collate\", \"namespace\", \"rd\", \"testthat\"));" +
+          "warnings()"
+        workingDir = project.projectDir
       }
     }
       
@@ -82,7 +95,7 @@ class RPackagePlugin implements Plugin<Project> {
     }
     project.compile.dependsOn project.roxygenize
    
-    project.task('buildRPackage',type:Exec, dependsOn: project.compile) {
+    project.task('buildRPackage',type:RExec, dependsOn: project.compile) {
 		extensions.create("rpackage",RPackageBaseExtension.class)
 		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
 		rpackage.conventionMapping.map("buildDir") { project.rpackage.buildDir }
@@ -92,10 +105,10 @@ class RPackagePlugin implements Plugin<Project> {
         outputs.file "${project.buildDir}/${project.rpackage.name}_${project.version}.tar.gz"
         })
       doFirst {
-        commandLine = ['R','CMD','build',
-                    "${rpackage.buildDir}"]
-        workingDir project.buildDir
-        println commandLine.join(" ")
+        project.buildDir.mkdirs()
+        command = 'build'
+        args "${rpackage.buildDir}"
+        workingDir = project.buildDir
       }
     }
   
@@ -106,7 +119,7 @@ class RPackagePlugin implements Plugin<Project> {
     }
     project.build.dependsOn project.buildRPackage
     
-    project.task('checkRPackage',type:Exec, dependsOn: project.build) {
+    project.task('checkRPackage',type:RExec, dependsOn: project.build) {
 		extensions.create("rpackage",RPackageBaseExtension.class)
 		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
 		rpackage.conventionMapping.map("buildDir") { project.rpackage.buildDir }
@@ -115,11 +128,9 @@ class RPackagePlugin implements Plugin<Project> {
         outputs.dir "${project.buildDir}/${project.rpackage.name}.Rcheck/"
         })
       doFirst {
-        commandLine = ['R','CMD','check',"-o",
-                    "${project.buildDir}",
-                    "${rpackage.buildDir}"]
-        workingDir project.projectDir
-        println commandLine.join(" ")
+        command = 'check'
+        args "-o","${project.buildDir}", "${rpackage.buildDir}"
+        workingDir = project.projectDir
       }
     }
  
@@ -140,7 +151,7 @@ class RPackagePlugin implements Plugin<Project> {
         project.install.dependsOn project.build
     }
 
-	project.task('skeletonCheck'){
+	project.task('skeleton'){
 		extensions.create("rpackage",RPackageBaseExtension.class)
 		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
 		rpackage.conventionMapping.map("buildDir") { project.rpackage.buildDir }
@@ -148,6 +159,15 @@ class RPackagePlugin implements Plugin<Project> {
 			if (rpackage.srcDir.exists()) {
 				throw new GradleException("Package source directory not empty for skeleton!")
 			}
+             def tmpdir = project.file(".skeleton")
+            if (!tmpdir.exists()){
+                tmpdir.mkdir()
+            }
+            project.exec {
+                            commandLine = ['R','-e',
+                  "package.skeleton(\"${project.rpackage.name}\",path=\".skeleton\",force=TRUE)"]
+                workingDir project.projectDir
+            }
 		}
 	}
 	
@@ -185,5 +205,37 @@ class RPackagePlugin implements Plugin<Project> {
 		}
 	  }
     project.install.dependsOn project.installRPackage
-  }
+
+    project.task('uploadCRAN',dependsOn: project.checkRPackage) {
+        doFirst {
+            def gradleProject = project
+            gradleProject.ant {
+                taskdef(name: 'ftp',
+                        classname: 'org.apache.tools.ant.taskdefs.optional.net.FTP',
+                        classpath: gradleProject.configurations.ant.asPath)
+                ftp(server: "cran.r-project.org",userid: "anonymous",password: "", port: 21, remotedir:"incoming") {
+                    fileset(dir: gradleProject.buildDir) {
+                        include(name: "${gradleProject.rpackage.name}_${gradleProject.version}.tar.gz")
+                    }
+                }
+            }
+        }
+    }
+
+    project.task('emailCRAN', type:EmailTask){
+        to {
+            address = "CRAN@R-project.org"
+            name = "CRAN"
+        }
+        email {
+            setSubject("CRAN submission ${project.rpackage.name} ${project.version}");
+            setMsg("I have read and agree to the CRAN Repository Policies: http://cran.r-project.org/web/packages/policies.html");
+        }
+    }
+
+    project.task('publishCRAN'){
+        dependsOn project.emailCRAN
+        dependsOn project.uploadCRAN
+    }
+    }
 }
