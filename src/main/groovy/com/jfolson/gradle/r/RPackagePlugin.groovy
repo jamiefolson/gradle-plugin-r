@@ -168,30 +168,13 @@ class RPackagePlugin implements Plugin<Project> {
                   "package.skeleton(\"${project.rpackage.name}\",path=\".skeleton\",force=TRUE)"]
                 workingDir project.projectDir
             }
+            project.copy {
+                from project.file(".skeleton/${project.rpackage.name}")
+                exclude "man/*"
+                into rpackage.srcDir
+            }
 		}
 	}
-	
-    project.task('skeletonGenerate',type:Exec, dependsOn: project.skeletonCheck) {
-	  doFirst {
-		def tmpdir = project.file(".skeleton")
-		if (!tmpdir.exists()){
-			tmpdir.mkdir()
-		}
-        commandLine = ['R','-e',
-          "package.skeleton(\"${project.rpackage.name}\",path=\".skeleton\",force=TRUE)"]
-        workingDir project.projectDir
-      }
-    }
-	project.task('skeleton',type:Copy, dependsOn: project.skeletonGenerate) {
-		extensions.create("rpackage",RPackageBaseExtension.class)
-		rpackage.conventionMapping.map("srcDir") { project.rpackage.srcDir }
-		rpackage.conventionMapping.map("buildDir") { project.rpackage.buildDir }
-		project.gradle.projectsEvaluated({
-			from project.file(".skeleton/${project.rpackage.name}")
-			exclude "man/*"
-			into rpackage.srcDir
-		})
-	  }
 	
 	project.task('installRPackage',type:Exec, dependsOn: project.buildRPackage) {
 		project.gradle.projectsEvaluated({
